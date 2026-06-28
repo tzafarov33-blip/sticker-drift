@@ -1,7 +1,7 @@
 {
   "name": "sticker-drift",
-  "version": "1.0.0",
-  "description": "Arcade drifting game for Yandex Games with garage, rewards, and multiple locations.",
+  "version": "2.0.0",
+  "description": "Three.js WebGL racing game for Yandex Games with 3D vehicles, open-world biomes, garage, and camera modes.",
   "private": true,
   "type": "module",
   "scripts": {

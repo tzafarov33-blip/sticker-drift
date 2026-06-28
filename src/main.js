@@ -1,144 +1,63 @@
-const canvas = document.querySelector('#game');
-const ctx = canvas.getContext('2d');
-const ui = document.querySelector('#ui');
-const modes = document.querySelector('#modes');
-const garage = document.querySelector('#garage');
-const hud = document.querySelector('#hud');
-const toast = document.querySelector('#toast');
-const speedEl = document.querySelector('#speed');
-const nitroEl = document.querySelector('#nitro');
-const driveModeEl = document.querySelector('#driveMode');
-const cameraModeEl = document.querySelector('#cameraMode');
-const coinEls = document.querySelectorAll('[data-coins]');
-const carEls = document.querySelectorAll('[data-car]');
-const carList = document.querySelector('#carList');
+import * as THREE from 'https://esm.sh/three@0.179.1';
+import { EffectComposer } from 'https://esm.sh/three@0.179.1/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'https://esm.sh/three@0.179.1/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'https://esm.sh/three@0.179.1/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { SSAOPass } from 'https://esm.sh/three@0.179.1/examples/jsm/postprocessing/SSAOPass.js';
 
-const cars = [
-  { id:'zhiguli', name:'Жигуль', price:0, color:'#d8e1e8', accent:'#9aa7b3', speed:4.9, handling:4.5, nitro:4.2, mass:1.18, grip:.82 },
-  { id:'bmw', name:'BMW M5 F90', price:2000, color:'#1f8cff', accent:'#08182d', speed:6.2, handling:6.3, nitro:5.8, mass:1.1, grip:.9 },
-  { id:'dodge', name:'Dodge Challenger', price:5000, color:'#ff7a1a', accent:'#18120c', speed:7.2, handling:6.6, nitro:7.1, mass:1.22, grip:.88 },
-  { id:'ferrari', name:'Ferrari', price:10000, color:'#ef233c', accent:'#2b0710', speed:8.3, handling:8.1, nitro:8, mass:.98, grip:.98 },
-  { id:'bugatti', name:'Bugatti', price:20000, color:'#263bff', accent:'#050814', speed:9.4, handling:8.8, nitro:9.4, mass:1.04, grip:1.02 },
-  { id:'formula', name:'Formula 1', price:50000, color:'#f5f7fb', accent:'#d71920', speed:10, handling:10, nitro:10, mass:.74, grip:1.18 }
+const viewport=document.querySelector('#viewport'), ui=document.querySelector('#ui'), modes=document.querySelector('#modes'), garage=document.querySelector('#garage'), hud=document.querySelector('#hud'), toast=document.querySelector('#toast');
+const speedEl=document.querySelector('#speed'), nitroEl=document.querySelector('#nitro'), driveModeEl=document.querySelector('#driveMode'), cameraModeEl=document.querySelector('#cameraMode'), carList=document.querySelector('#carList');
+const coinEls=document.querySelectorAll('[data-coins]'), carEls=document.querySelectorAll('[data-car]');
+const cars=[
+ {id:'zhiguli',name:'Жигуль',price:0,color:0xcfd8df,accent:0x8593a3,speed:42,accel:18,grip:.82,nitro:18,brake:24,mass:1250},
+ {id:'bmw',name:'BMW M5 F90',price:2000,color:0x1b7fff,accent:0x050a14,speed:56,accel:25,grip:.94,nitro:27,brake:32,mass:1850},
+ {id:'dodge',name:'Dodge Challenger',price:5000,color:0xff7a18,accent:0x15100a,speed:61,accel:27,grip:.9,nitro:31,brake:30,mass:1950},
+ {id:'ferrari',name:'Ferrari',price:10000,color:0xe90024,accent:0x200006,speed:70,accel:35,grip:1.06,nitro:36,brake:42,mass:1450},
+ {id:'bugatti',name:'Bugatti',price:20000,color:0x1b2cff,accent:0x02030a,speed:82,accel:39,grip:1.08,nitro:44,brake:44,mass:1650},
+ {id:'formula',name:'Formula 1',price:50000,color:0xf5f7fb,accent:0xd71920,speed:92,accel:48,grip:1.34,nitro:50,brake:58,mass:820}
 ];
-
-const locations = {
-  day:{ skyTop:'#62c8ff', skyBottom:'#ffe2a3', road:'#3f4552', shoulder:'#5d626d', grass:'#78c95c', lines:'#fff1ad', haze:'rgba(255,235,180,.22)', sun:'#fff3a5', city:true },
-  night:{ skyTop:'#080a1f', skyBottom:'#18214d', road:'#252b3a', shoulder:'#151a2a', grass:'#111827', lines:'#74f7ff', haze:'rgba(76,40,190,.26)', sun:'#b7c8ff', neon:true },
-  jungle:{ skyTop:'#4fae7e', skyBottom:'#d4f0a2', road:'#394238', shoulder:'#536245', grass:'#0e743a', lines:'#ffe987', haze:'rgba(73,255,128,.19)', sun:'#fff0a0', jungle:true }
-};
-
-let state = JSON.parse(localStorage.getItem('sticker-drift-save') || 'null') || { coins:0, owned:['zhiguli'], selected:'zhiguli' };
-let game = { screen:'menu', location:'day', x:0, vx:0, yaw:0, speed:0, nitro:100, drift:false, distance:0, coins:[], traffic:[], particles:[], dust:[], keys:{}, last:0, shake:0, camera:'third' };
-
-function save(){ localStorage.setItem('sticker-drift-save', JSON.stringify(state)); }
-function selectedCar(){ return cars.find(c => c.id === state.selected) || cars[0]; }
-function syncUI(){ coinEls.forEach(e => e.textContent = Math.floor(state.coins)); carEls.forEach(e => e.textContent = selectedCar().name); renderGarage(); }
-function show(section){ [ui,modes,garage,hud].forEach(e=>e.classList.add('hidden')); section.classList.remove('hidden'); game.screen = section===hud?'game':'menu'; }
-function notify(text){ toast.textContent = text; toast.classList.remove('hidden'); clearTimeout(notify.t); notify.t=setTimeout(()=>toast.classList.add('hidden'),1900); }
-function reward(amount){ state.coins += amount; save(); syncUI(); notify(`Реклама завершена: +${amount} монет`); }
-function shade(hex, amount){ const n=parseInt(hex.slice(1),16); const r=Math.max(0,Math.min(255,(n>>16)+amount)); const g=Math.max(0,Math.min(255,((n>>8)&255)+amount)); const b=Math.max(0,Math.min(255,(n&255)+amount)); return `rgb(${r},${g},${b})`; }
-
-function renderGarage(){
-  carList.innerHTML = cars.map(car => {
-    const owned = state.owned.includes(car.id), active = state.selected === car.id;
-    const action = owned ? (active ? 'Выбрана' : 'Выбрать') : `Купить за ${car.price}`;
-    return `<article class="car-card"><div class="car-art premium" style="--car-color:${car.color};--car-accent:${car.accent}"><i class="shine"></i><i class="wheel a"></i><i class="wheel b"></i></div><h3>${car.name}</h3><p>${car.price ? car.price + ' монет' : 'Стартовая машина'}</p>${stat('Скорость',car.speed)}${stat('Управление',car.handling)}${stat('Нитро',car.nitro)}<button data-buy="${car.id}" ${active?'disabled':''}>${action}</button></article>`;
-  }).join('');
-}
-function stat(label,value){ return `<small>${label}</small><div class="bar"><i style="width:${value*10}%"></i></div>`; }
-function start(mode){ Object.assign(game,{screen:'game',location:mode,x:0,vx:0,yaw:0,speed:0,nitro:100,drift:false,distance:0,coins:[],traffic:[],particles:[],dust:[],last:performance.now(),shake:0,camera:game.camera||'third'}); show(hud); }
-function laneX(lane,z){ return canvas.width/2 + lane * canvas.width * (.07 + .16*(1-z)); }
-function projectY(z){ return 226 + (1-z)*(1-z)*510; }
-function spawn(){ if(Math.random()<.04) game.coins.push({lane:Math.floor(Math.random()*3)-1,z:1.08,spin:Math.random()*7}); if(Math.random()<.02) game.traffic.push({lane:Math.floor(Math.random()*3)-1,z:1.12,color:['#c1121f','#06d6a0','#ffd166','#8d99ae'][Math.floor(Math.random()*4)],type:Math.random()>.55?'suv':'coupe'}); }
-
-function update(dt){
-  if(game.screen!=='game') return;
-  const car=selectedCar();
-  const nitroOn=(game.keys.ControlLeft||game.keys.ControlRight)&&game.nitro>0;
-  const targetSpeed=car.speed*(nitroOn?1.58:1);
-  game.speed += (targetSpeed-game.speed)*dt*(1.4/car.mass);
-  game.speed -= Math.abs(game.vx)*dt*.28;
-  if(nitroOn) game.nitro-=dt*car.nitro*13.5; else game.nitro=Math.min(100,game.nitro+dt*(7+car.nitro*.3));
-  const steer=(game.keys.ArrowLeft||game.keys.KeyA?-1:0)+(game.keys.ArrowRight||game.keys.KeyD?1:0);
-  const grip=car.grip*(game.drift?.52:1);
-  const steeringForce=steer*dt*car.handling*(game.drift?1.95:1.1);
-  game.vx += steeringForce;
-  game.vx *= Math.pow(.08 + grip*.86, dt*5.8);
-  game.x += game.vx*dt*(1.2+game.speed*.09);
-  if(Math.abs(game.x)>1.08){ game.vx -= Math.sign(game.x)*dt*2.3; game.speed*=.992; }
-  game.x=Math.max(-1.24,Math.min(1.24,game.x));
-  game.yaw += ((game.vx*1.4 + steer*.12)-game.yaw)*dt*(game.drift?5.5:8.5);
-  game.distance += game.speed*dt*58;
-  game.shake=Math.max(0,game.shake-dt*2.2);
-  if(game.drift && Math.abs(game.vx)>.18) game.dust.push({x:canvas.width/2+game.x*canvas.width*.18,y:644,life:1,side:Math.sign(game.vx)});
-  spawn();
-  for (const arr of [game.coins, game.traffic]) for (const o of arr) o.z -= dt*(.33+game.speed*.052);
-  game.coins = game.coins.filter(c=>{ c.spin+=dt*9; if(c.z<.18 && Math.abs(c.lane-game.x)<.29){state.coins+=50; save(); syncUI(); game.particles.push({x:laneX(c.lane,c.z),life:1}); return false;} return c.z>.04; });
-  game.traffic = game.traffic.filter(t=>{ if(t.z<.2 && Math.abs(t.lane-game.x)<.32){ game.speed*=.28; game.vx*=-.35; game.nitro=Math.max(0,game.nitro-28); game.shake=1; notify('Авария! Объезжайте машины.'); return false;} return t.z>.04; });
-  game.particles=game.particles.filter(p=>(p.life-=dt)>0);
-  game.dust=game.dust.filter(p=>(p.life-=dt*1.8)>0);
-  speedEl.textContent=Math.round(game.speed*34);
-  nitroEl.textContent=Math.max(0,Math.round(game.nitro));
-  driveModeEl.textContent=game.drift?'Дрифт':'Обычная езда';
-  cameraModeEl.textContent=game.camera==='first'?'1-е лицо':'3-е лицо';
-}
-
-function rounded(x,y,w,h,r){ ctx.beginPath(); ctx.roundRect(x,y,w,h,r); }
-function drawWheel(x,y,scale,turn=0){ ctx.save(); ctx.translate(x,y); ctx.rotate(turn); ctx.fillStyle='#06070a'; ctx.beginPath(); ctx.ellipse(0,0,15*scale,24*scale,0,0,7); ctx.fill(); ctx.strokeStyle='#687285'; ctx.lineWidth=4*scale; ctx.stroke(); ctx.strokeStyle='#cbd5e1'; ctx.lineWidth=1.2*scale; for(let i=0;i<6;i++){ ctx.rotate(Math.PI/3); ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(0,-16*scale); ctx.stroke(); } ctx.restore(); }
-function poly(points, fill, stroke='rgba(255,255,255,.08)'){ ctx.beginPath(); points.forEach(([x,y],i)=>i?ctx.lineTo(x,y):ctx.moveTo(x,y)); ctx.closePath(); ctx.fillStyle=fill; ctx.fill(); ctx.strokeStyle=stroke; ctx.stroke(); }
-function drawVehicle(x,y,scale,car,angle=0,lights=false){
-  ctx.save(); ctx.translate(x,y); ctx.rotate(angle); ctx.scale(scale,scale);
-  const body=car.color || car;
-  const accent=car.accent || shade(body,-85);
-  const grad=ctx.createLinearGradient(0,-88,0,62); grad.addColorStop(0,shade(body,62)); grad.addColorStop(.34,body); grad.addColorStop(1,shade(body,-70));
-  ctx.fillStyle='rgba(0,0,0,.46)'; ctx.beginPath(); ctx.ellipse(0,60,92,25,0,0,7); ctx.fill();
-  poly([[-72,-25],[-52,-62],[52,-62],[72,-25],[64,48],[-64,48]], accent);
-  poly([[-56,-70],[-30,-98],[30,-98],[56,-70],[48,8],[-48,8]], grad);
-  poly([[-44,8],[44,8],[60,44],[-60,44]], shade(body,-75));
-  const glass=ctx.createLinearGradient(0,-78,0,16); glass.addColorStop(0,'rgba(236,252,255,.95)'); glass.addColorStop(1,'rgba(46,84,116,.82)');
-  ctx.fillStyle=glass; rounded(-37,-60,74,38,13); ctx.fill(); rounded(-45,-17,90,35,10); ctx.fill();
-  ctx.fillStyle='rgba(255,255,255,.42)'; ctx.fillRect(-25,-55,12,31); ctx.fillRect(8,-14,14,29);
-  ctx.fillStyle=shade(body,-95); rounded(-64,9,128,32,14); ctx.fill();
-  ctx.fillStyle=grad; rounded(-54,-1,108,37,16); ctx.fill();
-  ctx.fillStyle='#fff7c2'; rounded(-45,-72,21,8,4); ctx.fill(); rounded(24,-72,21,8,4); ctx.fill();
-  ctx.fillStyle='#ff375f'; rounded(-49,35,24,9,4); ctx.fill(); rounded(25,35,24,9,4); ctx.fill();
-  if(lights){ const beam=ctx.createLinearGradient(0,-82,0,-210); beam.addColorStop(0,'rgba(255,246,184,.24)'); beam.addColorStop(1,'rgba(255,246,184,0)'); ctx.fillStyle=beam; ctx.beginPath(); ctx.moveTo(-42,-72); ctx.lineTo(-175,-230); ctx.lineTo(-38,-230); ctx.closePath(); ctx.fill(); ctx.beginPath(); ctx.moveTo(42,-72); ctx.lineTo(175,-230); ctx.lineTo(38,-230); ctx.closePath(); ctx.fill(); }
-  drawWheel(-55,-9,1,angle*2); drawWheel(55,-9,1,angle*2); drawWheel(-47,43,.9,angle*2); drawWheel(47,43,.9,angle*2);
-  ctx.restore();
-}
-function drawFirstPersonCockpit(car, loc){
-  const dash=ctx.createLinearGradient(0,500,0,720); dash.addColorStop(0,'rgba(8,10,14,.62)'); dash.addColorStop(1,'rgba(1,2,5,.98)'); ctx.fillStyle=dash; ctx.fillRect(0,500,canvas.width,220);
-  ctx.fillStyle='rgba(255,255,255,.12)'; ctx.fillRect(110,505,1060,4);
-  ctx.fillStyle=shade(car.color,-75); rounded(260,560,760,120,42); ctx.fill();
-  const wheel=ctx.createRadialGradient(640,650,35,640,650,160); wheel.addColorStop(0,'#1f2937'); wheel.addColorStop(.55,'#0b0f19'); wheel.addColorStop(.7,'transparent'); ctx.fillStyle=wheel; ctx.beginPath(); ctx.arc(640,650,145,0,7); ctx.fill(); ctx.strokeStyle='#64748b'; ctx.lineWidth=18; ctx.stroke();
-  ctx.fillStyle='rgba(125,247,255,.22)'; rounded(530,570,220,56,20); ctx.fill(); ctx.fillStyle='#dff8ff'; ctx.font='22px sans-serif'; ctx.fillText(`${Math.round(game.speed*34)} км/ч`,585,606);
-  if(loc.neon){ ctx.fillStyle='rgba(116,247,255,.16)'; ctx.fillRect(0,0,canvas.width,720); }
-}
-function drawBackground(loc){
-  const sky=ctx.createLinearGradient(0,0,0,canvas.height); sky.addColorStop(0,loc.skyTop); sky.addColorStop(.58,loc.skyBottom); sky.addColorStop(1,loc.grass); ctx.fillStyle=sky; ctx.fillRect(0,0,canvas.width,canvas.height);
-  ctx.fillStyle=loc.sun; ctx.beginPath(); ctx.arc(1050,95,loc.neon?34:58,0,7); ctx.fill();
-  for(let i=0;i<9;i++){ const x=(i*170-(game.distance*.18)%170); const h=70+(i%4)*38; ctx.fillStyle=loc.neon?`hsl(${220+i*20} 75% ${28+i%2*15}%)`:'rgba(48,68,86,.24)'; if(loc.city){ ctx.fillRect(x,190-h,88,h); ctx.fillStyle='rgba(255,245,180,.55)'; for(let w=0;w<4;w++) ctx.fillRect(x+14+w*17,205-h,7,h-20); } if(loc.jungle){ ctx.fillStyle=i%2?'#0c5f31':'#177843'; ctx.beginPath(); ctx.moveTo(x,230); ctx.lineTo(x+45,70+h*.2); ctx.lineTo(x+90,230); ctx.fill(); ctx.fillRect(x+42,150,10,88); } }
-  ctx.fillStyle=loc.grass; ctx.fillRect(0,235,canvas.width,485);
-}
-function drawRoad(loc){
-  const reflection=ctx.createLinearGradient(0,220,0,720); reflection.addColorStop(0,'rgba(255,255,255,.06)'); reflection.addColorStop(.55, loc.neon?'rgba(116,247,255,.18)':'rgba(255,255,255,.035)'); reflection.addColorStop(1,'rgba(255,255,255,0)');
-  ctx.fillStyle=loc.shoulder; ctx.beginPath(); ctx.moveTo(canvas.width*.34,220); ctx.lineTo(canvas.width*.66,220); ctx.lineTo(canvas.width*.98,720); ctx.lineTo(canvas.width*.02,720); ctx.closePath(); ctx.fill();
-  ctx.fillStyle=loc.road; ctx.beginPath(); ctx.moveTo(canvas.width*.39,220); ctx.lineTo(canvas.width*.61,220); ctx.lineTo(canvas.width*.86,720); ctx.lineTo(canvas.width*.14,720); ctx.closePath(); ctx.fill();
-  for(let i=0;i<42;i++){ const z=((game.distance/76+i)%42)/42; const y=projectY(z); const roadW=canvas.width*(.12+.34*(1-z)); const x=canvas.width/2; ctx.fillStyle=`rgba(255,255,255,${.02+.12*(1-z)})`; ctx.fillRect(x-roadW,y,roadW*2,2); if(i%2===0){ ctx.fillStyle=loc.lines; const dashH=22+70*(1-z); const dashW=5+18*(1-z); ctx.fillRect(x-dashW/2,y,dashW,dashH); ctx.fillRect(x-roadW*.38-dashW/2,y,dashW*.75,dashH*.8); ctx.fillRect(x+roadW*.38-dashW/2,y,dashW*.75,dashH*.8); } }
-  ctx.fillStyle=reflection; ctx.fillRect(canvas.width*.14,220,canvas.width*.72,500);
-  ctx.fillStyle=loc.haze; ctx.fillRect(0,0,canvas.width,canvas.height);
-}
-function drawCollectibles(){
-  game.coins.forEach(c=>{ const y=projectY(c.z), x=laneX(c.lane,c.z), s=.45+(1-c.z)*1.9; ctx.save(); ctx.translate(x,y); ctx.scale(Math.abs(Math.cos(c.spin))*.35+.22,1); ctx.fillStyle='#ffcf33'; ctx.beginPath(); ctx.ellipse(0,0,20*s,25*s,0,0,7); ctx.fill(); ctx.strokeStyle='#fff0a2'; ctx.lineWidth=3*s; ctx.stroke(); ctx.fillStyle='#855f00'; ctx.font=`${18*s}px sans-serif`; ctx.fillText('₽',-6*s,7*s); ctx.restore(); });
-  game.traffic.forEach(t=>{ const y=projectY(t.z), x=laneX(t.lane,t.z), s=.28+(1-t.z)*1.18; drawVehicle(x,y,s,{color:t.color,accent:shade(t.color,-95)},0,locations[game.location].neon); });
-}
-function drawEffects(){ game.dust.forEach(p=>{ ctx.fillStyle=`rgba(210,210,210,${p.life*.24})`; ctx.beginPath(); ctx.ellipse(p.x-p.side*46*p.life,p.y+20,70*(1-p.life+.2),24*(1-p.life+.25),0,0,7); ctx.fill(); }); game.particles.forEach(p=>{ctx.fillStyle=`rgba(255,232,90,${p.life})`;ctx.font=`${42*p.life}px sans-serif`;ctx.fillText('+50',p.x,430-p.life*90)}); }
-function draw(){ const loc=locations[game.location]||locations.day; ctx.save(); if(game.shake){ ctx.translate((Math.random()-.5)*game.shake*16,(Math.random()-.5)*game.shake*10); } drawBackground(loc); drawRoad(loc); drawCollectibles(); drawEffects(); if(game.camera==='first'){ drawFirstPersonCockpit(selectedCar(), loc); } else { drawVehicle(canvas.width/2+game.x*canvas.width*.18,610,1.08,selectedCar(),game.yaw,loc.neon); } ctx.restore(); }
-function loop(now){ const dt=Math.min(.033,(now-game.last)/1000||0); game.last=now; update(dt); draw(); requestAnimationFrame(loop); }
-
-document.addEventListener('click', e=>{ const a=e.target.closest('[data-action],[data-mode],[data-buy]'); if(!a) return; if(a.dataset.action==='play') show(modes); if(a.dataset.action==='garage') show(garage); if(a.dataset.action==='menu') show(ui); if(a.dataset.action==='camera'){ game.camera=game.camera==='first'?'third':'first'; cameraModeEl.textContent=game.camera==='first'?'1-е лицо':'3-е лицо'; } if(a.dataset.action==='reward1000') reward(1000); if(a.dataset.action==='reward2000') reward(2000); if(a.dataset.mode) start(a.dataset.mode); if(a.dataset.buy){ const car=cars.find(c=>c.id===a.dataset.buy); if(state.owned.includes(car.id)){state.selected=car.id;} else if(state.coins>=car.price){state.coins-=car.price;state.owned.push(car.id);state.selected=car.id;notify(`${car.name} куплена!`);} else notify('Недостаточно монет.'); save(); syncUI(); }});
-document.addEventListener('keydown', e=>{ game.keys[e.code]=true; if(e.code==='ShiftLeft'||e.code==='ShiftRight'){ if(!e.repeat) game.drift=!game.drift; } if((e.code==='KeyC'||e.code==='KeyV')&&!e.repeat){ game.camera=game.camera==='first'?'third':'first'; } });
-document.addEventListener('keyup', e=>{ game.keys[e.code]=false; });
-
-syncUI(); show(ui); requestAnimationFrame(loop);
+const state=JSON.parse(localStorage.getItem('sd3d-save')||'null')||{coins:0,owned:['zhiguli'],selected:'zhiguli'};
+const game={running:false,mode:'day',camera:'third',drift:false,keys:{},speed:0,sideVel:0,nitro:100,coins:[],traffic:[],clock:new THREE.Clock(),distance:0};
+const scene=new THREE.Scene(); scene.fog=new THREE.FogExp2(0x9ec9ff,.006);
+const camera=new THREE.PerspectiveCamera(68,innerWidth/innerHeight,.1,1800);
+const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'}); renderer.setPixelRatio(Math.min(devicePixelRatio,1.8)); renderer.setSize(innerWidth,innerHeight); renderer.outputColorSpace=THREE.SRGBColorSpace; renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1.05; renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap; viewport.append(renderer.domElement);
+const composer=new EffectComposer(renderer); composer.addPass(new RenderPass(scene,camera)); const ssao=new SSAOPass(scene,camera,innerWidth,innerHeight); ssao.kernelRadius=14; ssao.minDistance=.003; ssao.maxDistance=.12; composer.addPass(ssao); composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth,innerHeight),.38,.55,.82));
+const hemi=new THREE.HemisphereLight(0xbfdcff,0x243018,1.7); scene.add(hemi); const sun=new THREE.DirectionalLight(0xfff0c2,4.8); sun.position.set(-120,180,80); sun.castShadow=true; sun.shadow.mapSize.set(2048,2048); sun.shadow.camera.near=1; sun.shadow.camera.far=520; sun.shadow.camera.left=-180; sun.shadow.camera.right=180; sun.shadow.camera.top=180; sun.shadow.camera.bottom=-180; scene.add(sun);
+const roadMat=new THREE.MeshStandardMaterial({color:0x20242b,roughness:.42,metalness:.08,envMapIntensity:.8}); const wetMat=new THREE.MeshStandardMaterial({color:0x161b22,roughness:.18,metalness:.22,envMapIntensity:1.4}); const grassMat=new THREE.MeshStandardMaterial({color:0x236b2d,roughness:.85});
+const world=new THREE.Group(), trafficGroup=new THREE.Group(), coinGroup=new THREE.Group(); scene.add(world,trafficGroup,coinGroup);
+const player=new THREE.Group(); scene.add(player); let playerBody;
+function save(){localStorage.setItem('sd3d-save',JSON.stringify(state));} function car(){return cars.find(c=>c.id===state.selected)||cars[0];}
+function sync(){coinEls.forEach(e=>e.textContent=Math.floor(state.coins)); carEls.forEach(e=>e.textContent=car().name); renderGarage();}
+function show(x){[ui,modes,garage,hud].forEach(e=>e.classList.add('hidden')); x.classList.remove('hidden'); game.running=x===hud;}
+function notify(t){toast.textContent=t;toast.classList.remove('hidden');clearTimeout(notify.t);notify.t=setTimeout(()=>toast.classList.add('hidden'),1800);} function reward(n){state.coins+=n;save();sync();notify(`+${n} монет за рекламу`);}
+function mat(color,metal=.75,rough=.25){return new THREE.MeshPhysicalMaterial({color,metalness:metal,roughness:rough,clearcoat:1,clearcoatRoughness:.12,reflectivity:1});}
+function mesh(g,m,pos,cast=true){const o=new THREE.Mesh(g,m); o.position.copy(pos||new THREE.Vector3()); o.castShadow=cast; o.receiveShadow=true; return o;}
+function createCar(c,traffic=false){const g=new THREE.Group(), paint=mat(c.color), dark=mat(c.accent,.5,.38), glass=new THREE.MeshPhysicalMaterial({color:0x9edcff,metalness:0,roughness:.05,transmission:.35,transparent:true,opacity:.56});
+ const body=mesh(new THREE.BoxGeometry(2.2,.55,4.5),paint,new THREE.Vector3(0,.65,0)); body.scale.x=traffic?1.05:1; g.add(body);
+ const hood=mesh(new THREE.BoxGeometry(2.05,.28,1.25),paint,new THREE.Vector3(0,.88,-1.35)); hood.rotation.x=.05; g.add(hood);
+ const cabin=mesh(new THREE.BoxGeometry(1.55,.78,1.45),glass,new THREE.Vector3(0,1.22,.1)); cabin.scale.z=.9; g.add(cabin);
+ const rear=mesh(new THREE.BoxGeometry(2.0,.42,1.1),paint,new THREE.Vector3(0,.95,1.55)); g.add(rear);
+ const splitter=mesh(new THREE.BoxGeometry(2.35,.12,.22),dark,new THREE.Vector3(0,.42,-2.38)); g.add(splitter);
+ const spoiler=mesh(new THREE.BoxGeometry(2.25,.08,.32),dark,new THREE.Vector3(0,1.35,2.05)); g.add(spoiler);
+ const wheelGeo=new THREE.CylinderGeometry(.42,.42,.34,32), tire=new THREE.MeshStandardMaterial({color:0x050505,roughness:.55}), disc=new THREE.MeshStandardMaterial({color:0xb8bec8,metalness:.9,roughness:.18});
+ [[-1.18,.43,-1.45],[1.18,.43,-1.45],[-1.18,.43,1.45],[1.18,.43,1.45]].forEach(p=>{const w=mesh(wheelGeo,tire,new THREE.Vector3(...p)); w.rotation.z=Math.PI/2; g.add(w); const d=mesh(new THREE.CylinderGeometry(.25,.25,.37,20),disc,new THREE.Vector3(...p),false); d.rotation.z=Math.PI/2; g.add(d);});
+ [[-.72,.72,-2.28],[.72,.72,-2.28]].forEach(p=>{const l=new THREE.PointLight(0xfff4c0,traffic?0:1.6,16); l.position.set(...p); g.add(l); g.add(mesh(new THREE.SphereGeometry(.09,16,8),new THREE.MeshStandardMaterial({color:0xfff6ca,emissive:0xfff1aa,emissiveIntensity:2}),new THREE.Vector3(...p),false));});
+ [[-.7,.72,2.3],[.7,.72,2.3]].forEach(p=>g.add(mesh(new THREE.SphereGeometry(.08,16,8),new THREE.MeshStandardMaterial({color:0xff1d35,emissive:0xff0018,emissiveIntensity:1.8}),new THREE.Vector3(...p),false)));
+ return g;}
+function rebuildPlayer(){player.clear(); playerBody=createCar(car()); player.add(playerBody);} rebuildPlayer();
+function createWorld(mode='day'){world.clear(); trafficGroup.clear(); coinGroup.clear(); scene.background=new THREE.Color(mode==='night'?0x050713:mode==='jungle'?0x88c994:0x8fd3ff); scene.fog.color.set(mode==='night'?0x060816:mode==='jungle'?0xa1dba7:0xb9dcff); roadMat.color.set(mode==='night'?0x111821:0x242930); const ground=mesh(new THREE.PlaneGeometry(900,1600,1,1),grassMat,new THREE.Vector3(0,-.01,0),false); ground.rotation.x=-Math.PI/2; world.add(ground);
+ for(let z=-760;z<760;z+=80){const road=mesh(new THREE.PlaneGeometry(18,82),mode==='night'?wetMat:roadMat,new THREE.Vector3(0,.01,z),false); road.rotation.x=-Math.PI/2; world.add(road); const lineMat=new THREE.MeshStandardMaterial({color:0xf8f4d8,emissive:mode==='night'?0x2444ff:0x000000,emissiveIntensity:mode==='night'?.5:0}); for(const x of [-3,3,0]){const mark=mesh(new THREE.PlaneGeometry(x? .18:.13, x?52:18),lineMat,new THREE.Vector3(x,.025,z),false); mark.rotation.x=-Math.PI/2; world.add(mark);} }
+ for(let i=0;i<220;i++){const z=-760+Math.random()*1520, side=Math.random()>.5?1:-1, x=side*(13+Math.random()*95); if(mode==='night'&&Math.random()<.38){const b=mesh(new THREE.BoxGeometry(6+Math.random()*12,18+Math.random()*70,6+Math.random()*14),new THREE.MeshStandardMaterial({color:0x182033,roughness:.55,metalness:.2}),new THREE.Vector3(x,10,z)); world.add(b); const glow=new THREE.PointLight([0x53f5ff,0xff2bd6,0xffd166][i%3],1.1,36); glow.position.set(x,14,z); world.add(glow);} else {const trunk=mesh(new THREE.CylinderGeometry(.25,.45,3,8),new THREE.MeshStandardMaterial({color:0x5b331a}),new THREE.Vector3(x,1.5,z)); const crown=mesh(new THREE.ConeGeometry(2.5+Math.random()*2,6+Math.random()*4,9),new THREE.MeshStandardMaterial({color:mode==='jungle'?0x0f7a37:0x1e6b2a,roughness:.9}),new THREE.Vector3(x,6,z)); world.add(trunk,crown);} }
+ for(let z=-700;z<700;z+=160){const sign=mesh(new THREE.BoxGeometry(2.2,1.1,.12),new THREE.MeshStandardMaterial({color:0x1667ff,metalness:.1,roughness:.35}),new THREE.Vector3(11,3,z)); const pole=mesh(new THREE.CylinderGeometry(.05,.05,3,8),new THREE.MeshStandardMaterial({color:0x888888,metalness:.8}),new THREE.Vector3(11,1.5,z)); world.add(sign,pole);} }
+function renderGarage(){carList.innerHTML=cars.map(c=>{const owned=state.owned.includes(c.id),active=state.selected===c.id;return `<article class="car-card"><div class="car-art" style="--car-color:#${c.color.toString(16).padStart(6,'0')}"><i class="shine"></i><i class="wheel a"></i><i class="wheel b"></i></div><h3>${c.name}</h3><p>${c.price?c.price+' монет':'Стартовая машина'}</p>${bar('Скорость',c.speed/92)}${bar('Сцепление',c.grip/1.34)}${bar('Нитро',c.nitro/50)}<button data-buy="${c.id}" ${active?'disabled':''}>${owned?(active?'Выбрана':'Выбрать'):'Купить за '+c.price}</button></article>`}).join('');}
+function bar(n,v){return `<small>${n}</small><div class="bar"><i style="width:${Math.round(v*100)}%"></i></div>`;}
+function start(mode){game.mode=mode; createWorld(mode); game.running=true; game.speed=0; game.sideVel=0; game.nitro=100; game.distance=0; game.coins=[]; game.traffic=[]; show(hud);} createWorld('day');
+function spawn(){if(game.coins.length<24){const coin=mesh(new THREE.TorusGeometry(.38,.11,12,28),new THREE.MeshStandardMaterial({color:0xffd447,emissive:0xffb000,emissiveIntensity:.35,metalness:.9,roughness:.18}),new THREE.Vector3((Math.floor(Math.random()*3)-1)*3,1.1,-180-Math.random()*620)); coinGroup.add(coin); game.coins.push(coin);} if(game.traffic.length<16){const tc=cars[1+Math.floor(Math.random()*(cars.length-1))], t=createCar(tc,true); t.position.set((Math.floor(Math.random()*3)-1)*3,0,-220-Math.random()*720); t.userData.speed=18+Math.random()*20; trafficGroup.add(t); game.traffic.push(t);}}
+function update(dt){if(!game.running)return; const c=car(), steer=(game.keys.ArrowLeft||game.keys.KeyA?-1:0)+(game.keys.ArrowRight||game.keys.KeyD?1:0), throttle=game.keys.ArrowDown||game.keys.KeyS?-1:1, nitro=(game.keys.ControlLeft||game.keys.ControlRight)&&game.nitro>0; game.speed+=((throttle>0?c.speed*(nitro?1.32:1):0)-game.speed)*dt*(c.accel/18); if(throttle<0) game.speed-=c.brake*dt; game.speed=Math.max(0,Math.min(c.speed*1.35,game.speed)); game.nitro=THREE.MathUtils.clamp(game.nitro+(nitro?-c.nitro*dt:12*dt),0,100); const grip=c.grip*(game.drift?.45:1); game.sideVel+=steer*dt*(18/c.mass*1200)*(game.drift?1.8:1); game.sideVel*=Math.pow(grip*.72,dt*5); player.position.x=THREE.MathUtils.clamp(player.position.x+game.sideVel*dt*game.speed*.08,-7.2,7.2); player.rotation.y=THREE.MathUtils.lerp(player.rotation.y,-game.sideVel*.06-steer*.06,dt*8); game.distance+=game.speed*dt; world.position.z=(game.distance%80); spawn();
+ for(const coin of [...game.coins]){coin.rotation.y+=dt*4; coin.position.z+=game.speed*dt; if(coin.position.distanceTo(player.position)<2.2){state.coins+=50; save(); sync(); coinGroup.remove(coin); game.coins.splice(game.coins.indexOf(coin),1);} if(coin.position.z>28){coinGroup.remove(coin); game.coins.splice(game.coins.indexOf(coin),1);}}
+ for(const t of [...game.traffic]){t.position.z+=(game.speed-t.userData.speed)*dt; if(t.position.distanceTo(player.position)<2.8){game.speed*=.25; game.sideVel*=-.5; notify('Удар! Контролируй дистанцию.');} if(t.position.z>50){trafficGroup.remove(t); game.traffic.splice(game.traffic.indexOf(t),1);}}
+ const camTarget=game.camera==='first'?new THREE.Vector3(player.position.x,2.0,player.position.z-1.25):new THREE.Vector3(player.position.x,4.8,player.position.z+9.2); const look=game.camera==='first'?new THREE.Vector3(player.position.x+game.sideVel*.18,1.7,player.position.z-18):new THREE.Vector3(player.position.x,1.2,player.position.z-8); camera.position.lerp(camTarget,dt*5); camera.lookAt(look); speedEl.textContent=Math.round(game.speed*4.4); nitroEl.textContent=Math.round(game.nitro); driveModeEl.textContent=game.drift?'Drift':'Grip'; cameraModeEl.textContent=game.camera==='first'?'1-е лицо':'3-е лицо';}
+function loop(){const dt=Math.min(.033,game.clock.getDelta()); update(dt); composer.render(); requestAnimationFrame(loop);} loop();
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight); composer.setSize(innerWidth,innerHeight);});
+document.addEventListener('keydown',e=>{game.keys[e.code]=true; if((e.code==='ShiftLeft'||e.code==='ShiftRight')&&!e.repeat)game.drift=!game.drift; if((e.code==='KeyC'||e.code==='KeyV')&&!e.repeat)game.camera=game.camera==='first'?'third':'first';}); document.addEventListener('keyup',e=>game.keys[e.code]=false);
+document.addEventListener('click',e=>{const a=e.target.closest('[data-action],[data-mode],[data-buy]'); if(!a)return; if(a.dataset.action==='play')show(modes); if(a.dataset.action==='garage')show(garage); if(a.dataset.action==='menu')show(ui); if(a.dataset.action==='camera')game.camera=game.camera==='first'?'third':'first'; if(a.dataset.action==='reward1000')reward(1000); if(a.dataset.action==='reward2000')reward(2000); if(a.dataset.mode)start(a.dataset.mode); if(a.dataset.buy){const c=cars.find(x=>x.id===a.dataset.buy); if(state.owned.includes(c.id)){state.selected=c.id; rebuildPlayer();} else if(state.coins>=c.price){state.coins-=c.price; state.owned.push(c.id); state.selected=c.id; rebuildPlayer(); notify(`${c.name} куплена`);} else notify('Недостаточно монет'); save(); sync();}});
+sync(); show(ui);
