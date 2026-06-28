@@ -7,7 +7,7 @@ Arcade browser racing game prototype for Yandex Games.
 - Main menu with Play, Garage, and rewarded-ad coin buttons.
 - Three endless-road locations: day, night, and jungle.
 - Coin pickup, traffic avoidance, drift mode on `Shift`, and nitro on `Ctrl`.
-- Pseudo-3D car rendering with highlights, shadows, wheels, headlight beams, road depth, haze, scenery, drift dust, and crash shake.
+- Pseudo-3D car rendering with polygon body panels, highlights, shadows, wheels, headlight beams, road depth, haze, scenery, drift dust, crash shake, reflective road lighting, and first-person cockpit camera.
 - Garage economy with purchasable cars and stronger stats for more expensive cars.
 
 ## Run locally
@@ -17,6 +17,13 @@ npm start
 ```
 
 Then open <http://localhost:4173>.
+
+## Controls
+
+- `A`/`D` or arrow keys: steer.
+- `Shift`: toggle drift mode.
+- `Ctrl`: hold nitro.
+- `C` or `V`: switch between third-person and first-person cockpit camera.
 
 ## Check
 
