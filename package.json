@@ -1,0 +1,11 @@
+{
+  "name": "sticker-drift",
+  "version": "1.0.0",
+  "description": "Arcade drifting game for Yandex Games with garage, rewards, and multiple locations.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "build": "node scripts/check-static.js"
+  }
+}
