@@ -3,21 +3,85 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Sticker Drift Vehicle Studio</title>
+    <title>Sticker Drift Racing</title>
     <link rel="stylesheet" href="src/styles.css" />
   </head>
   <body>
     <main id="app">
-      <div id="viewport" aria-label="Sticker Drift 3D vehicle studio"></div>
-      <section id="ui" class="panel main-menu">
-        <p class="eyebrow">Yandex Games • AAA Vehicle Art Pipeline</p>
-        <h1>Vehicle Studio</h1>
-        <p class="lead">Фокус только на машинах: GLTF-модели, PBR-материалы, HDRI, тени, отражения, подвеска, руль и колёса.</p>
-        <div class="stats"><span>Монеты: <b data-coins>0</b></span><span>Машина: <b data-car>GLTF Sports Coupe</b></span></div>
-        <button data-action="play">Открыть студию</button><button data-action="garage">Выбрать машину</button><button data-action="reward1000">Смотреть рекламу за 1000 монет</button>
+      <div id="viewport" aria-label="Sticker Drift 3D racing scene"></div>
+
+      <section id="loadingScreen" class="loading-screen hidden" aria-live="polite" aria-label="Asset loading progress">
+        <div class="loading-card">
+          <p class="eyebrow">Sticker Drift • AAA Web Pipeline</p>
+          <h2>Preparing Race</h2>
+          <p id="loadingStatus" class="lead">Initializing asset pipeline</p>
+          <div class="loading-meter" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+            <i id="loadingFill"></i>
+          </div>
+          <div class="loading-row">
+            <strong id="loadingPercent">0%</strong>
+            <span id="loadingAsset">Queueing assets</span>
+          </div>
+          <small id="loadingTip">Tip: hold Shift to brake hard and start a drift before the corner apex.</small>
+        </div>
       </section>
-      <section id="garage" class="panel hidden garage-panel"><h2>Vehicle Assets</h2><p>Здесь загружаются только реальные GLTF/GLB vehicle assets. Примитивные кубы/box-cars для машин не используются.</p><div class="stats"><span>Монеты: <b data-coins>0</b></span></div><div id="carList" class="car-list"></div><div class="garage-actions"><button data-action="reward2000">Получить 2000 монет за рекламу</button><button class="ghost" data-action="menu">Назад</button></div></section>
-      <section id="hud" class="hud hidden"><div>Статус: <b id="speed">0</b></div><div>Power: <b id="nitro">100</b>%</div><div>Режим: <b id="driveMode">Vehicle Studio</b></div><div>Камера: <b id="cameraMode">Exterior</b></div><button data-action="camera">Interior C</button><button data-action="menu">Меню</button></section>
+
+      <section id="ui" class="panel main-menu">
+        <p class="eyebrow">Yandex Games • Browser Racing</p>
+        <h1>Sticker Drift</h1>
+        <p class="lead">Полированная гоночная сцена: GLTF-машины, PBR, HDRI, тени, отражения, дрифт-физика, чекпоинты и полноценная загрузка без pop-in.</p>
+        <div class="stats">
+          <span>Монеты: <b data-coins>0</b></span>
+          <span>Машина: <b data-car>GLTF Sports Coupe</b></span>
+          <span>Камера: <b data-camera-label>Third Person</b></span>
+        </div>
+        <div class="menu-actions">
+          <button data-action="play">Start Race</button>
+          <button class="ghost" data-action="garage">Garage</button>
+          <button class="ghost" data-action="settings">Settings</button>
+          <button data-action="reward1000">Ad Reward +1000</button>
+        </div>
+      </section>
+
+      <section id="garage" class="panel hidden garage-panel">
+        <p class="eyebrow">Vehicle Assets</p>
+        <h2>Garage</h2>
+        <p>Выберите детализированную GLTF/GLB машину. Загруженные модели кешируются и не скачиваются повторно.</p>
+        <div class="stats"><span>Монеты: <b data-coins>0</b></span></div>
+        <div id="carList" class="car-list"></div>
+        <div class="garage-actions">
+          <button data-action="reward2000">Ad Reward +2000</button>
+          <button class="ghost" data-action="menu">Back</button>
+        </div>
+      </section>
+
+      <section id="settings" class="panel hidden settings-panel">
+        <p class="eyebrow">Performance Settings</p>
+        <h2>Settings</h2>
+        <label class="setting-row"><span>Post FX Quality</span><select id="qualitySelect"><option value="high">High</option><option value="balanced" selected>Balanced</option><option value="performance">Performance</option></select></label>
+        <label class="setting-row"><span>Audio</span><button class="ghost" data-action="audio">Toggle Audio</button></label>
+        <button class="ghost" data-action="menu">Back</button>
+      </section>
+
+      <section id="hud" class="hud hidden">
+        <div class="hud-card speed-card"><small>KM/H</small><b id="speed">0</b></div>
+        <div class="hud-card"><small>Gear</small><b id="gear">N</b></div>
+        <div class="hud-card rpm-card"><small>RPM</small><div class="rpm-shell"><i id="rpmFill"></i></div></div>
+        <div class="hud-card"><small>Drift</small><b id="driftScore">0</b></div>
+        <div class="hud-card"><small>Coins</small><b data-coins>0</b></div>
+        <div class="hud-card"><small>Checkpoint</small><b id="checkpoint">1/6</b></div>
+        <div class="hud-card"><small>Camera</small><b id="cameraMode">Third</b></div>
+        <button class="ghost" data-action="pause">Pause</button>
+      </section>
+
+      <section id="pause" class="panel hidden pause-panel">
+        <p class="eyebrow">Race Paused</p>
+        <h2>Pause</h2>
+        <p>WASD/Arrows drive, Shift brakes, Space switches camera, P pauses.</p>
+        <button data-action="resume">Resume</button>
+        <button class="ghost" data-action="menu">Main Menu</button>
+      </section>
+
       <div id="toast" class="toast hidden"></div>
     </main>
     <script type="module" src="src/main.js"></script>
