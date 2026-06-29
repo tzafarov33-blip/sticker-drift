@@ -61,9 +61,11 @@ composer.addPass(smaa);
 const clock = new THREE.Clock();
 const keys = new Set();
 const carRig = { root: new THREE.Group(), model: null, wheels: [], steering: [], body: null };
-const world = { root: new THREE.Group(), checkpoints: [], activeCheckpoint: 0, roadRadius: 82, roadWidth: 12 };
+const world = { root: new THREE.Group(), checkpoints: [], sectors: [], activeCheckpoint: 0, roadRadius: 82, roadWidth: 12, sectorCount: 12 };
 const vehicleBody = { position: new THREE.Vector3(0, 0, 74), velocity: new THREE.Vector3(), heading: Math.PI, steer: 0, yawVelocity: 0, speed: 0, rpm: 0, gear: 1, drift: 0, driftTotal: 0, airborne: 0 };
 const cameraModes = ['Third Person', 'Close Third', 'Cockpit', 'First Person'];
+const visibilityFrustum = new THREE.Frustum();
+const visibilityMatrix = new THREE.Matrix4();
 let cameraModeIndex = 0;
 let raceReady = false;
 let paused = false;
@@ -71,6 +73,7 @@ let preloadPromise = null;
 let audioContext = null;
 let engineOsc = null;
 let engineGain = null;
+const renderProfile = { elapsed: 0, frames: 0, calls: 0, triangles: 0, points: 0, lines: 0 };
 
 scene.add(world.root, carRig.root);
 
@@ -291,10 +294,7 @@ function buildRaceWorld() {
   world.root.add(road);
   addInstancedPlanes('lane-mark', 96, 0.34, 3.2, 0xffffff, 0, world.roadRadius, 0.018, true);
   addCurbs(curbRed, curbWhite);
-  addGuardRails();
-  addStreetLights();
-  addNature();
-  addMountains();
+  addStreamingSectors();
   addCheckpoints();
 }
 function addInstancedPlanes(name, count, width, height, color, offset, radius, y, dashed) {
@@ -325,6 +325,130 @@ function addCurbs(red, white) {
     mesh.instanceMatrix.needsUpdate = true;
     mesh.receiveShadow = true;
     world.root.add(mesh);
+  });
+}
+function addStreamingSectors() {
+  if (world.sectors.length) return;
+  const railMat = mat('guard-rail', () => new THREE.MeshStandardMaterial({ color: 0xaab4c3, metalness: 0.82, roughness: 0.28, envMapIntensity: 1.2 }));
+  const poleMat = mat('light-pole', () => new THREE.MeshStandardMaterial({ color: 0x2a303a, metalness: 0.78, roughness: 0.22 }));
+  const lampMat = mat('lamp-glow', () => new THREE.MeshStandardMaterial({ color: 0xfff3c2, emissive: 0xffd27a, emissiveIntensity: 1.4 }));
+  const trunkMat = mat('trunk', () => new THREE.MeshStandardMaterial({ color: 0x54351f, roughness: 0.82 }));
+  const leafMat = mat('leaf', () => new THREE.MeshStandardMaterial({ color: 0x1f7a3b, roughness: 0.78 }));
+  const rockMat = mat('rock', () => new THREE.MeshStandardMaterial({ color: 0x5d6470, roughness: 0.9 }));
+  const mountainMat = mat('mountains', () => new THREE.MeshStandardMaterial({ color: 0x29394a, roughness: 0.96, envMapIntensity: 0.2 }));
+  const railGeo = sharedGeometry('rail', () => new THREE.CylinderGeometry(0.08, 0.08, 3.0, 8));
+  const poleGeo = sharedGeometry('pole', () => new THREE.CylinderGeometry(0.09, 0.11, 5.5, 10));
+  const lampGeo = sharedGeometry('lamp', () => new THREE.SphereGeometry(0.28, 12, 8));
+  const trunkGeo = sharedGeometry('trunk', () => new THREE.CylinderGeometry(0.18, 0.28, 2.2, 8));
+  const leafGeo = sharedGeometry('leaf', () => new THREE.ConeGeometry(1.2, 3.1, 9));
+  const rockGeo = sharedGeometry('rock', () => new THREE.DodecahedronGeometry(0.8, 0));
+  const mountainGeo = sharedGeometry('mountain', () => new THREE.ConeGeometry(12, 38, 5));
+  for (let sectorIndex = 0; sectorIndex < world.sectorCount; sectorIndex += 1) {
+    const start = (sectorIndex / world.sectorCount) * Math.PI * 2;
+    const end = ((sectorIndex + 1) / world.sectorCount) * Math.PI * 2;
+    const mid = (start + end) * 0.5;
+    const sector = new THREE.Group();
+    const high = new THREE.Group();
+    const medium = new THREE.Group();
+    const low = new THREE.Group();
+    sector.add(high, medium, low);
+    sector.userData = {
+      center: new THREE.Vector3(Math.sin(mid) * world.roadRadius, 0, Math.cos(mid) * world.roadRadius),
+      radius: 78,
+      high,
+      medium,
+      low,
+      shadowEnabled: false
+    };
+    addSectorRails(high, railGeo, railMat, start, end);
+    addSectorLights(high, poleGeo, lampGeo, poleMat, lampMat, start, end);
+    addSectorNature(high, medium, trunkGeo, leafGeo, rockGeo, trunkMat, leafMat, rockMat, sectorIndex, start, end);
+    addSectorMountains(low, mountainGeo, mountainMat, sectorIndex, start, end);
+    world.sectors.push(sector);
+    world.root.add(sector);
+  }
+}
+function sharedGeometry(key, factory) {
+  if (!assets.materials.has(`geometry-${key}`)) {
+    const geometry = factory();
+    geometry.computeBoundingSphere();
+    assets.materials.set(`geometry-${key}`, geometry);
+  }
+  return assets.materials.get(`geometry-${key}`);
+}
+function fillInstancedArc(mesh, count, start, end, radius, y, scaleFactory, rotationFactory) {
+  const matrix = new THREE.Matrix4();
+  for (let i = 0; i < count; i += 1) {
+    const t = count === 1 ? 0.5 : i / (count - 1);
+    const angle = THREE.MathUtils.lerp(start, end, t);
+    const scale = scaleFactory ? scaleFactory(i, angle) : new THREE.Vector3(1, 1, 1);
+    const rotation = rotationFactory ? rotationFactory(i, angle) : new THREE.Quaternion();
+    matrix.compose(new THREE.Vector3(Math.sin(angle) * radius, y, Math.cos(angle) * radius), rotation, scale);
+    mesh.setMatrixAt(i, matrix);
+  }
+  mesh.instanceMatrix.needsUpdate = true;
+  mesh.frustumCulled = true;
+}
+function addSectorRails(group, geometry, material, start, end) {
+  const mesh = new THREE.InstancedMesh(geometry, material, 12);
+  fillInstancedArc(mesh, 12, start, end, 92, 0.9, null, (i, angle) => new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2, 0, -angle)));
+  mesh.castShadow = false;
+  mesh.receiveShadow = true;
+  group.add(mesh);
+}
+function addSectorLights(group, poleGeo, lampGeo, poleMat, lampMat, start, end) {
+  const poleMesh = new THREE.InstancedMesh(poleGeo, poleMat, 2);
+  const lampMesh = new THREE.InstancedMesh(lampGeo, lampMat, 2);
+  fillInstancedArc(poleMesh, 2, start + 0.08, end - 0.08, 99, 2.75);
+  fillInstancedArc(lampMesh, 2, start + 0.08, end - 0.08, 99, 5.6);
+  poleMesh.castShadow = false;
+  lampMesh.castShadow = false;
+  group.add(poleMesh, lampMesh);
+}
+function addSectorNature(high, medium, trunkGeo, leafGeo, rockGeo, trunkMat, leafMat, rockMat, sectorIndex, start, end) {
+  const treeCount = 8;
+  const rockCount = 4;
+  const trunkMesh = new THREE.InstancedMesh(trunkGeo, trunkMat, treeCount);
+  const leafMesh = new THREE.InstancedMesh(leafGeo, leafMat, treeCount);
+  const rockMesh = new THREE.InstancedMesh(rockGeo, rockMat, rockCount);
+  fillInstancedArc(trunkMesh, treeCount, start + 0.03, end - 0.03, 112 + (sectorIndex % 3) * 7, 1.1, (i) => new THREE.Vector3(0.75 + (i % 4) * 0.12, 0.75 + (i % 4) * 0.12, 0.75 + (i % 4) * 0.12));
+  fillInstancedArc(leafMesh, treeCount, start + 0.03, end - 0.03, 112 + (sectorIndex % 3) * 7, 3.4, (i) => new THREE.Vector3(0.75 + (i % 4) * 0.12, 0.75 + (i % 4) * 0.12, 0.75 + (i % 4) * 0.12));
+  fillInstancedArc(rockMesh, rockCount, start + 0.08, end - 0.08, 106 + (sectorIndex % 2) * 10, 0.45, (i) => new THREE.Vector3(0.58 + i * 0.09, 0.38 + i * 0.05, 0.58 + i * 0.09), (i, angle) => new THREE.Quaternion().setFromEuler(new THREE.Euler(0, angle, 0)));
+  trunkMesh.castShadow = true;
+  leafMesh.castShadow = true;
+  rockMesh.castShadow = false;
+  trunkMesh.receiveShadow = leafMesh.receiveShadow = rockMesh.receiveShadow = true;
+  high.add(trunkMesh, leafMesh);
+  medium.add(rockMesh);
+}
+function addSectorMountains(group, geometry, material, sectorIndex, start, end) {
+  const mesh = new THREE.InstancedMesh(geometry, material, 2);
+  fillInstancedArc(mesh, 2, start + 0.12, end - 0.12, 185, 18, (i) => new THREE.Vector3(0.72 + ((sectorIndex + i) % 5) * 0.14, 0.72 + ((sectorIndex + i) % 5) * 0.14, 0.72 + ((sectorIndex + i) % 5) * 0.14), (i, angle) => new THREE.Quaternion().setFromEuler(new THREE.Euler(0, angle, 0)));
+  mesh.castShadow = false;
+  mesh.receiveShadow = true;
+  group.add(mesh);
+}
+function updateWorldStreaming() {
+  if (!world.sectors.length) return;
+  visibilityMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+  visibilityFrustum.setFromProjectionMatrix(visibilityMatrix);
+  const playerPosition = vehicleBody.position;
+  world.sectors.forEach((sector) => {
+    const center = sector.userData.center;
+    const distance = center.distanceTo(playerPosition);
+    const inFrustum = visibilityFrustum.intersectsSphere(new THREE.Sphere(center, sector.userData.radius));
+    const highVisible = distance < 118 && inFrustum;
+    const mediumVisible = distance < 168 && inFrustum;
+    const lowVisible = distance < 260 && inFrustum;
+    sector.visible = lowVisible;
+    sector.userData.high.visible = highVisible;
+    sector.userData.medium.visible = mediumVisible;
+    sector.userData.low.visible = lowVisible;
+    const shadowEnabled = highVisible && distance < 96;
+    if (sector.userData.shadowEnabled !== shadowEnabled) {
+      sector.userData.shadowEnabled = shadowEnabled;
+      sector.userData.high.traverse((object) => { if (object.isMesh) object.castShadow = shadowEnabled; });
+    }
   });
 }
 function addGuardRails() {
@@ -548,16 +672,30 @@ function applyQuality() {
   bloom.enabled = state.quality !== 'performance';
   composer.setSize(innerWidth, innerHeight);
 }
+function updateRenderProfile(dt) {
+  renderProfile.elapsed += dt;
+  renderProfile.frames += 1;
+  if (renderProfile.elapsed >= 1) {
+    renderProfile.calls = renderer.info.render.calls;
+    renderProfile.triangles = renderer.info.render.triangles;
+    renderProfile.points = renderer.info.render.points;
+    renderProfile.lines = renderer.info.render.lines;
+    renderProfile.elapsed = 0;
+    renderProfile.frames = 0;
+  }
+}
 function animate() {
   const dt = Math.min(0.033, clock.getDelta());
   if (raceReady && !paused) {
     updatePhysics(dt);
     updateCarVisuals(dt);
     updateCamera(dt);
+    updateWorldStreaming();
     updateHud();
     updateAudio();
   }
   composer.render();
+  updateRenderProfile(dt);
   requestAnimationFrame(animate);
 }
 addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); composer.setSize(innerWidth, innerHeight); });
