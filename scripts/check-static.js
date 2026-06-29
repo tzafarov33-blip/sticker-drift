@@ -11,4 +11,10 @@ if (!main.includes('GLTFLoader')) throw new Error('GLTFLoader integration is mis
 if (!main.includes('RGBELoader')) throw new Error('HDRI loader integration is missing');
 if (!main.includes('polyhaven') && !main.includes('Poly Haven')) throw new Error('Commercial-use HDR/PBR asset source is missing');
 if (main.includes('getContext(\'2d\')') || main.includes('getContext("2d")')) throw new Error('Canvas2D is forbidden for the 3D renderer');
+for (const primitive of ['BoxGeometry', 'CubeGeometry']) {
+  if (main.includes(primitive)) throw new Error(`${primitive} is forbidden for the vehicle system`);
+}
+for (const forbidden of ['createWorld(', 'trafficGroup', 'coinGroup']) {
+  if (main.includes(forbidden)) throw new Error(`Gameplay/map code is out of scope for the vehicle-only task: ${forbidden}`);
+}
 console.log('Three.js WebGL game files are present and readable.');

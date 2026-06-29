@@ -3,22 +3,21 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Sticker Drift 3D</title>
+    <title>Sticker Drift Vehicle Studio</title>
     <link rel="stylesheet" href="src/styles.css" />
   </head>
   <body>
     <main id="app">
-      <div id="viewport" aria-label="Sticker Drift 3D WebGL game"></div>
+      <div id="viewport" aria-label="Sticker Drift 3D vehicle studio"></div>
       <section id="ui" class="panel main-menu">
-        <p class="eyebrow">Yandex Games • WebGL 3D Racing</p>
-        <h1>Sticker Drift 3D</h1>
-        <p class="lead">Открытый мир, PBR-материалы, свет, тени, нитро, дрифт и вид из салона.</p>
-        <div class="stats"><span>Монеты: <b data-coins>0</b></span><span>Машина: <b data-car>Жигуль</b></span></div>
-        <button data-action="play">Играть</button><button data-action="garage">Гараж</button><button data-action="reward1000">Смотреть рекламу за 1000 монет</button>
+        <p class="eyebrow">Yandex Games • AAA Vehicle Art Pipeline</p>
+        <h1>Vehicle Studio</h1>
+        <p class="lead">Фокус только на машинах: GLTF-модели, PBR-материалы, HDRI, тени, отражения, подвеска, руль и колёса.</p>
+        <div class="stats"><span>Монеты: <b data-coins>0</b></span><span>Машина: <b data-car>GLTF Sports Coupe</b></span></div>
+        <button data-action="play">Открыть студию</button><button data-action="garage">Выбрать машину</button><button data-action="reward1000">Смотреть рекламу за 1000 монет</button>
       </section>
-      <section id="modes" class="panel hidden"><h2>Выберите регион</h2><div class="mode-grid"><button data-mode="day"><span>Побережье</span><small>Город, пляж, мосты</small></button><button data-mode="night"><span>Ночной мегаполис</span><small>Неон, мокрый асфальт, тоннели</small></button><button data-mode="jungle"><span>Горы и лес</span><small>Серпантин, деревья, река</small></button></div><button class="ghost" data-action="menu">Назад</button></section>
-      <section id="garage" class="panel hidden garage-panel"><h2>Гараж</h2><p>Покупайте машины за монеты. У дорогих авто выше сцепление, турбо, тормоза и максимальная скорость.</p><div class="stats"><span>Монеты: <b data-coins>0</b></span></div><div id="carList" class="car-list"></div><div class="garage-actions"><button data-action="reward2000">Получить 2000 монет за рекламу</button><button class="ghost" data-action="menu">Назад</button></div></section>
-      <section id="hud" class="hud hidden"><div>Монеты: <b data-coins>0</b></div><div>Скорость: <b id="speed">0</b></div><div>Нитро: <b id="nitro">100</b>%</div><div>Режим: <b id="driveMode">Grip</b></div><div>Камера: <b id="cameraMode">3-е лицо</b></div><button data-action="camera">Камера C</button><button data-action="menu">Меню</button></section>
+      <section id="garage" class="panel hidden garage-panel"><h2>Vehicle Assets</h2><p>Здесь загружаются только реальные GLTF/GLB vehicle assets. Примитивные кубы/box-cars для машин не используются.</p><div class="stats"><span>Монеты: <b data-coins>0</b></span></div><div id="carList" class="car-list"></div><div class="garage-actions"><button data-action="reward2000">Получить 2000 монет за рекламу</button><button class="ghost" data-action="menu">Назад</button></div></section>
+      <section id="hud" class="hud hidden"><div>Статус: <b id="speed">0</b></div><div>Power: <b id="nitro">100</b>%</div><div>Режим: <b id="driveMode">Vehicle Studio</b></div><div>Камера: <b id="cameraMode">Exterior</b></div><button data-action="camera">Interior C</button><button data-action="menu">Меню</button></section>
       <div id="toast" class="toast hidden"></div>
     </main>
     <script type="module" src="src/main.js"></script>

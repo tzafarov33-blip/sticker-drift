@@ -1,15 +1,15 @@
-# Sticker Drift 3D
+# Sticker Drift Vehicle Studio
 
-Commercial-style browser racing game for Yandex Games powered by Three.js/WebGL.
+Commercial-quality vehicle pipeline slice for a future Yandex Games racing project. This task intentionally focuses only on browser-ready vehicles, not map or gameplay.
 
 ## Features
 
-- WebGL renderer using Three.js, ACES tone mapping, soft shadows, Bloom, SSAO, HDRI environment lighting and runtime GLTF loading.
-- Real GLTF vehicle assets are loaded at runtime, then upgraded with PBR metallic paint, glass, headlights, brake lights, wheels and brake discs.
-- Open-world inspired regions use Poly Haven CC0 HDR/PBR assets for sky lighting and asphalt, plus roads, markings, buildings, trees, signs and wet reflections.
-- Vehicle systems for acceleration, braking, tire grip, inertia, drifting, nitro, traffic collisions and first-person/third-person cameras.
-- Garage economy with purchasable cars and stronger stats for more expensive vehicles.
-- Modern glassmorphism UI designed for Yandex Games reward flows.
+- Three.js WebGL renderer with ACES tone mapping, anti-aliasing, high-quality shadows, Bloom and SSAO.
+- HDRI environment lighting via Poly Haven HDR assets for realistic reflections on car paint and glass.
+- Runtime GLTF/GLB vehicle loading with `GLTFLoader`; vehicles are never built from cubes or BoxGeometry.
+- Vehicle material pass that upgrades loaded meshes to PBR metallic paint, transmissive glass, tire rubber, brake/rim metal, headlights and taillights when named mesh data is available.
+- Vehicle rig pass for browser-friendly animation: wheel rotation, steering animation, suspension bounce, exterior orbit camera and interior camera.
+- Vehicle asset selector with purchasable entries and Yandex-style rewarded coin actions.
 
 ## Run locally
 
@@ -19,15 +19,12 @@ npm start
 
 Then open <http://localhost:4173>.
 
-> The game imports Three.js modules, GLTF vehicle assets, Poly Haven HDRI lighting and Poly Haven asphalt textures at runtime. Internet access is required when running locally unless you vendor the modules/assets.
+> The vehicle studio imports Three.js modules, GLTF vehicle assets and Poly Haven HDRI lighting at runtime. Internet access is required unless you vendor the assets.
 
 ## Controls
 
-- `A`/`D` or arrow keys: steer.
-- `S` or down arrow: brake.
-- `Shift`: toggle drift mode.
-- `Ctrl`: hold nitro.
-- `C` or `V`: switch between third-person and first-person cockpit camera.
+- `C`: switch exterior/interior vehicle camera.
+- `Space`: toggle wheel/suspension motion preview.
 
 ## Check
 
