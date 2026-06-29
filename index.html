@@ -9,6 +9,18 @@
   <body>
     <main id="app">
       <div id="viewport" aria-label="Sticker Drift 3D vehicle studio"></div>
+      <section id="loadingScreen" class="loading-screen hidden" aria-live="polite" aria-label="Asset loading progress">
+        <div class="loading-card">
+          <p class="eyebrow">AAA Streaming Pipeline</p>
+          <h2>Preparing Race</h2>
+          <p id="loadingStatus" class="lead">Initializing asset pipeline</p>
+          <div class="loading-meter" role="progressbar" aria-valuemin="0" aria-valuemax="100">
+            <i id="loadingFill"></i>
+          </div>
+          <strong id="loadingPercent">0%</strong>
+          <small id="loadingDetail">Preloading GLTF models, HDRI, textures, PBR materials and shaders before gameplay.</small>
+        </div>
+      </section>
       <section id="ui" class="panel main-menu">
         <p class="eyebrow">Yandex Games • AAA Vehicle Art Pipeline</p>
         <h1>Vehicle Studio</h1>
