@@ -86,10 +86,15 @@ class AssetPipeline {
     this.manualTotal = 11;
     this.networkLoaded = 0;
     this.networkTotal = 1;
+    this.visible = false;
+    this.ready = false;
+    this.promise = null;
+    this.lastLabel = 'Stage 1 ready: menu systems online';
+    this.lastAsset = 'UI, input, saves and renderer';
     this.manager.onProgress = (url, loaded, total) => {
       this.networkLoaded = loaded;
       this.networkTotal = Math.max(total, 1);
-      this.paint(`Streaming ${url.split('/').pop()}`, url.split('/').pop());
+      this.paint(`Background streaming ${url.split('/').pop()}`, url.split('/').pop());
     };
     this.draco = new DRACOLoader(this.manager).setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.7/');
     this.ktx2 = new KTX2Loader(this.manager).setTranscoderPath('https://unpkg.com/three@0.179.1/examples/jsm/libs/basis/').detectSupport(renderer);
@@ -102,19 +107,37 @@ class AssetPipeline {
   }
   step(label, asset = label) { this.manualLoaded += 1; this.paint(label, asset); }
   paint(label, asset) {
+    this.lastLabel = label;
+    this.lastAsset = asset;
     const network = this.networkLoaded / Math.max(this.networkTotal, 1);
     const manual = this.manualLoaded / this.manualTotal;
-    const pct = Math.min(99, Math.round((network * 0.62 + manual * 0.38) * 100));
-    loading.root.classList.remove('hidden');
+    const pct = this.ready ? 100 : Math.min(99, Math.round((network * 0.62 + manual * 0.38) * 100));
     loading.fill.style.width = `${pct}%`;
     loading.percent.textContent = `${pct}%`;
     loading.status.textContent = label;
     loading.asset.textContent = asset;
     loading.meter.setAttribute('aria-valuenow', `${pct}`);
     loading.tip.textContent = TIPS[this.manualLoaded % TIPS.length];
+    if (this.visible) loading.root.classList.remove('hidden');
   }
-  async preloadAll() {
-    this.paint('Preparing dependency graph', 'LoadingManager');
+  async preloadAll({ visible = false } = {}) {
+    if (visible) {
+      this.visible = true;
+      loading.root.classList.remove('hidden');
+      this.paint(this.ready ? 'Race ready from cache' : this.lastLabel, this.ready ? 'No reload required' : this.lastAsset);
+    }
+    if (this.ready) return;
+    if (this.promise) return this.promise;
+    this.promise = this.runPreload().catch((error) => {
+      this.promise = null;
+      this.ready = false;
+      throw error;
+    });
+    return this.promise;
+  }
+  async runPreload() {
+    this.manualLoaded = 0;
+    this.paint('Stage 1 complete — background preload started', 'Asset dependency graph');
     await Promise.all([this.loadHdri(ASSETS.hdri), ...ASSETS.textures.map((url) => this.loadTexture(url)), ...VEHICLES.map((v) => this.loadVehicle(v))]);
     this.step('Applying HDRI lighting', 'HDR reflections');
     scene.environment = this.hdri;
@@ -129,12 +152,17 @@ class AssetPipeline {
     await this.compileShaders();
     this.step('Final GPU warmup', 'Bloom, SSAO, SMAA');
     composer.render();
-    loading.fill.style.width = '100%';
-    loading.percent.textContent = '100%';
-    loading.status.textContent = 'Race ready';
-    loading.asset.textContent = 'All assets resident';
-    loading.meter.setAttribute('aria-valuenow', '100');
-    await delay(250);
+    this.ready = true;
+    this.paint('Race ready', 'All cars, road, textures, HDRI, audio, physics and shaders are cached');
+    if (this.visible) {
+      await delay(250);
+      loading.root.classList.add('hidden');
+    }
+  }
+  async ensureRaceReady() {
+    await this.preloadAll({ visible: true });
+    if (!this.ready) await this.promise;
+    this.visible = false;
     loading.root.classList.add('hidden');
   }
   async loadHdri(url) {
@@ -427,8 +455,8 @@ function resetRace() {
   world.activeCheckpoint = 0;
 }
 async function enterRace() {
-  if (!preloadPromise) preloadPromise = assets.preloadAll();
-  await preloadPromise;
+  if (!preloadPromise) preloadPromise = assets.preloadAll({ visible: false });
+  await assets.ensureRaceReady();
   resetRace();
   raceReady = true;
   paused = false;
@@ -569,3 +597,10 @@ syncUi();
 show('menu');
 loading.root.classList.add('hidden');
 animate();
+setTimeout(() => {
+  if (!preloadPromise) preloadPromise = assets.preloadAll({ visible: false }).catch((error) => {
+    preloadPromise = null;
+    console.error('Background preload failed', error);
+    notify('Background preload retry will run when the race starts');
+  });
+}, 120);
