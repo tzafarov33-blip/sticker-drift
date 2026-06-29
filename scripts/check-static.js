@@ -7,5 +7,8 @@ for (const file of required) {
 }
 const main = await readFile('src/main.js', 'utf8');
 if (!main.includes('three@')) throw new Error('Three.js runtime import is missing');
+if (!main.includes('GLTFLoader')) throw new Error('GLTFLoader integration is missing');
+if (!main.includes('RGBELoader')) throw new Error('HDRI loader integration is missing');
+if (!main.includes('polyhaven') && !main.includes('Poly Haven')) throw new Error('Commercial-use HDR/PBR asset source is missing');
 if (main.includes('getContext(\'2d\')') || main.includes('getContext("2d")')) throw new Error('Canvas2D is forbidden for the 3D renderer');
 console.log('Three.js WebGL game files are present and readable.');

@@ -3,6 +3,8 @@ import { EffectComposer } from 'https://esm.sh/three@0.179.1/examples/jsm/postpr
 import { RenderPass } from 'https://esm.sh/three@0.179.1/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'https://esm.sh/three@0.179.1/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { SSAOPass } from 'https://esm.sh/three@0.179.1/examples/jsm/postprocessing/SSAOPass.js';
+import { GLTFLoader } from 'https://esm.sh/three@0.179.1/examples/jsm/loaders/GLTFLoader.js';
+import { RGBELoader } from 'https://esm.sh/three@0.179.1/examples/jsm/loaders/RGBELoader.js';
 
 const viewport=document.querySelector('#viewport'), ui=document.querySelector('#ui'), modes=document.querySelector('#modes'), garage=document.querySelector('#garage'), hud=document.querySelector('#hud'), toast=document.querySelector('#toast');
 const speedEl=document.querySelector('#speed'), nitroEl=document.querySelector('#nitro'), driveModeEl=document.querySelector('#driveMode'), cameraModeEl=document.querySelector('#cameraMode'), carList=document.querySelector('#carList');
@@ -22,27 +24,38 @@ const camera=new THREE.PerspectiveCamera(68,innerWidth/innerHeight,.1,1800);
 const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'}); renderer.setPixelRatio(Math.min(devicePixelRatio,1.8)); renderer.setSize(innerWidth,innerHeight); renderer.outputColorSpace=THREE.SRGBColorSpace; renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1.05; renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap; viewport.append(renderer.domElement);
 const composer=new EffectComposer(renderer); composer.addPass(new RenderPass(scene,camera)); const ssao=new SSAOPass(scene,camera,innerWidth,innerHeight); ssao.kernelRadius=14; ssao.minDistance=.003; ssao.maxDistance=.12; composer.addPass(ssao); composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth,innerHeight),.38,.55,.82));
 const hemi=new THREE.HemisphereLight(0xbfdcff,0x243018,1.7); scene.add(hemi); const sun=new THREE.DirectionalLight(0xfff0c2,4.8); sun.position.set(-120,180,80); sun.castShadow=true; sun.shadow.mapSize.set(2048,2048); sun.shadow.camera.near=1; sun.shadow.camera.far=520; sun.shadow.camera.left=-180; sun.shadow.camera.right=180; sun.shadow.camera.top=180; sun.shadow.camera.bottom=-180; scene.add(sun);
+const ASSETS={toyCar:'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/ToyCar/glTF-Binary/ToyCar.glb',truck:'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/CesiumMilkTruck/glTF/CesiumMilkTruck.gltf',hdri:'https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/outdoor_workshop_1k.hdr',asphalt:{map:'https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/asphalt_02/asphalt_02_diff_1k.jpg',normal:'https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/asphalt_02/asphalt_02_nor_gl_1k.jpg',rough:'https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/asphalt_02/asphalt_02_rough_1k.jpg'}};
+const textureLoader=new THREE.TextureLoader(), gltfLoader=new GLTFLoader();
 const roadMat=new THREE.MeshStandardMaterial({color:0x20242b,roughness:.42,metalness:.08,envMapIntensity:.8}); const wetMat=new THREE.MeshStandardMaterial({color:0x161b22,roughness:.18,metalness:.22,envMapIntensity:1.4}); const grassMat=new THREE.MeshStandardMaterial({color:0x236b2d,roughness:.85});
+function loadTexture(url, target, slot){textureLoader.load(url,t=>{t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(8,28); t.colorSpace=slot==='map'?THREE.SRGBColorSpace:THREE.NoColorSpace; target[slot]=t; target.needsUpdate=true;});}
+loadTexture(ASSETS.asphalt.map,roadMat,'map'); loadTexture(ASSETS.asphalt.normal,roadMat,'normalMap'); loadTexture(ASSETS.asphalt.rough,roadMat,'roughnessMap'); loadTexture(ASSETS.asphalt.map,wetMat,'map'); loadTexture(ASSETS.asphalt.normal,wetMat,'normalMap');
+new RGBELoader().load(ASSETS.hdri,h=>{h.mapping=THREE.EquirectangularReflectionMapping; scene.environment=h; scene.background=h;});
 const world=new THREE.Group(), trafficGroup=new THREE.Group(), coinGroup=new THREE.Group(); scene.add(world,trafficGroup,coinGroup);
-const player=new THREE.Group(); scene.add(player); let playerBody;
+const player=new THREE.Group(); scene.add(player); let playerBody; const vehicleAssets={car:null,truck:null,ready:false};
 function save(){localStorage.setItem('sd3d-save',JSON.stringify(state));} function car(){return cars.find(c=>c.id===state.selected)||cars[0];}
 function sync(){coinEls.forEach(e=>e.textContent=Math.floor(state.coins)); carEls.forEach(e=>e.textContent=car().name); renderGarage();}
 function show(x){[ui,modes,garage,hud].forEach(e=>e.classList.add('hidden')); x.classList.remove('hidden'); game.running=x===hud;}
 function notify(t){toast.textContent=t;toast.classList.remove('hidden');clearTimeout(notify.t);notify.t=setTimeout(()=>toast.classList.add('hidden'),1800);} function reward(n){state.coins+=n;save();sync();notify(`+${n} монет за рекламу`);}
 function mat(color,metal=.75,rough=.25){return new THREE.MeshPhysicalMaterial({color,metalness:metal,roughness:rough,clearcoat:1,clearcoatRoughness:.12,reflectivity:1});}
 function mesh(g,m,pos,cast=true){const o=new THREE.Mesh(g,m); o.position.copy(pos||new THREE.Vector3()); o.castShadow=cast; o.receiveShadow=true; return o;}
-function createCar(c,traffic=false){const g=new THREE.Group(), paint=mat(c.color), dark=mat(c.accent,.5,.38), glass=new THREE.MeshPhysicalMaterial({color:0x9edcff,metalness:0,roughness:.05,transmission:.35,transparent:true,opacity:.56});
- const body=mesh(new THREE.BoxGeometry(2.2,.55,4.5),paint,new THREE.Vector3(0,.65,0)); body.scale.x=traffic?1.05:1; g.add(body);
- const hood=mesh(new THREE.BoxGeometry(2.05,.28,1.25),paint,new THREE.Vector3(0,.88,-1.35)); hood.rotation.x=.05; g.add(hood);
- const cabin=mesh(new THREE.BoxGeometry(1.55,.78,1.45),glass,new THREE.Vector3(0,1.22,.1)); cabin.scale.z=.9; g.add(cabin);
- const rear=mesh(new THREE.BoxGeometry(2.0,.42,1.1),paint,new THREE.Vector3(0,.95,1.55)); g.add(rear);
- const splitter=mesh(new THREE.BoxGeometry(2.35,.12,.22),dark,new THREE.Vector3(0,.42,-2.38)); g.add(splitter);
- const spoiler=mesh(new THREE.BoxGeometry(2.25,.08,.32),dark,new THREE.Vector3(0,1.35,2.05)); g.add(spoiler);
- const wheelGeo=new THREE.CylinderGeometry(.42,.42,.34,32), tire=new THREE.MeshStandardMaterial({color:0x050505,roughness:.55}), disc=new THREE.MeshStandardMaterial({color:0xb8bec8,metalness:.9,roughness:.18});
- [[-1.18,.43,-1.45],[1.18,.43,-1.45],[-1.18,.43,1.45],[1.18,.43,1.45]].forEach(p=>{const w=mesh(wheelGeo,tire,new THREE.Vector3(...p)); w.rotation.z=Math.PI/2; g.add(w); const d=mesh(new THREE.CylinderGeometry(.25,.25,.37,20),disc,new THREE.Vector3(...p),false); d.rotation.z=Math.PI/2; g.add(d);});
- [[-.72,.72,-2.28],[.72,.72,-2.28]].forEach(p=>{const l=new THREE.PointLight(0xfff4c0,traffic?0:1.6,16); l.position.set(...p); g.add(l); g.add(mesh(new THREE.SphereGeometry(.09,16,8),new THREE.MeshStandardMaterial({color:0xfff6ca,emissive:0xfff1aa,emissiveIntensity:2}),new THREE.Vector3(...p),false));});
- [[-.7,.72,2.3],[.7,.72,2.3]].forEach(p=>g.add(mesh(new THREE.SphereGeometry(.08,16,8),new THREE.MeshStandardMaterial({color:0xff1d35,emissive:0xff0018,emissiveIntensity:1.8}),new THREE.Vector3(...p),false)));
- return g;}
+function tuneVehicleModel(root,c){
+ root.traverse(o=>{if(o.isMesh){o.castShadow=true; o.receiveShadow=true; const name=(o.name||'').toLowerCase(); if(name.includes('glass')||name.includes('window')){o.material=new THREE.MeshPhysicalMaterial({color:0x9edcff,metalness:0,roughness:.03,transmission:.45,transparent:true,opacity:.52,envMapIntensity:1.8});} else if(name.includes('wheel')||name.includes('tire')){o.material=new THREE.MeshStandardMaterial({color:0x050505,roughness:.48,metalness:.05});} else {o.material=mat(c.color,.82,.2);}}});
+ return root;
+}
+async function loadVehicleAssets(){
+ const [toy,truck]=await Promise.all([gltfLoader.loadAsync(ASSETS.toyCar),gltfLoader.loadAsync(ASSETS.truck)]);
+ vehicleAssets.car=toy.scene; vehicleAssets.truck=truck.scene; vehicleAssets.ready=true; rebuildPlayer();
+}
+loadVehicleAssets().catch(e=>notify(`Не удалось загрузить GLTF модели: ${e.message}`));
+function createCar(c,traffic=false){
+ const source=(traffic&&vehicleAssets.truck?vehicleAssets.truck:vehicleAssets.car);
+ if(!source) return new THREE.Group();
+ const g=tuneVehicleModel(source.clone(true),c);
+ const box=new THREE.Box3().setFromObject(g), size=box.getSize(new THREE.Vector3());
+ const scale=(traffic?4.6:4.35)/Math.max(size.x,size.y,size.z);
+ g.scale.setScalar(scale); g.rotation.y=Math.PI; g.position.y=.08;
+ return g;
+}
 function rebuildPlayer(){player.clear(); playerBody=createCar(car()); player.add(playerBody);} rebuildPlayer();
 function createWorld(mode='day'){world.clear(); trafficGroup.clear(); coinGroup.clear(); scene.background=new THREE.Color(mode==='night'?0x050713:mode==='jungle'?0x88c994:0x8fd3ff); scene.fog.color.set(mode==='night'?0x060816:mode==='jungle'?0xa1dba7:0xb9dcff); roadMat.color.set(mode==='night'?0x111821:0x242930); const ground=mesh(new THREE.PlaneGeometry(900,1600,1,1),grassMat,new THREE.Vector3(0,-.01,0),false); ground.rotation.x=-Math.PI/2; world.add(ground);
  for(let z=-760;z<760;z+=80){const road=mesh(new THREE.PlaneGeometry(18,82),mode==='night'?wetMat:roadMat,new THREE.Vector3(0,.01,z),false); road.rotation.x=-Math.PI/2; world.add(road); const lineMat=new THREE.MeshStandardMaterial({color:0xf8f4d8,emissive:mode==='night'?0x2444ff:0x000000,emissiveIntensity:mode==='night'?.5:0}); for(const x of [-3,3,0]){const mark=mesh(new THREE.PlaneGeometry(x? .18:.13, x?52:18),lineMat,new THREE.Vector3(x,.025,z),false); mark.rotation.x=-Math.PI/2; world.add(mark);} }
